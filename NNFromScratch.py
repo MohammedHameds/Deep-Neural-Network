@@ -1,13 +1,5 @@
-from sklearn.datasets import make_blobs
-import matplotlib.pyplot as plt 
 import numpy as np
-np.random.seed(3)
-
-X,y = make_blobs(10,centers= 2)
-# plt.scatter(X[:,0],X[:,1] ,c=y,s=50, cmap = 'vlag_r')
-# plt.grid()
-# plt.show()
-
+import matplotlib.pyplot as plt 
 
 
 class NeuralNetwork:
@@ -16,12 +8,11 @@ class NeuralNetwork:
         
         self.NNSizes = []
         self.NNActivationFunctions = []
-        # self.NNInput = []
-        # self.NNOutput = []
         self.NNCostFunction = []
         self.NNCache = {}
         self.NNParameters = {}
         self.NNDerivatived = {}
+        np.random.seed(1)
         
     def Initialize(self) :
        layer_dims = self.NNSizes
@@ -54,12 +45,25 @@ class NeuralNetwork:
       Z = cache
       s = 1/(1+np.exp(-Z))
       dZ = dA * s * (1-s)
-      
-      return dZ          
+      return dZ         
+  
+
+    def relu_backward(self , dA, Z):
+      dZ = np.array(dA, copy=True) 
+      dZ[Z <= 0] = 0
+      return dZ
+
+
+    def tanh_backward(self , dA, Z):
+      a = self.tanh(Z)
+      dZ = dA * (1-a**2)
+      return dZ    
+  
         
     def LinearForward(self,A_prev, W , b) :
         Z = np.dot(W,A_prev) + b
-        return Z       
+        return Z    
+    
 
     def LinearActivationForward(self , A_prev, W , b , activation) :
         if activation == 'sigmoid' :
@@ -99,7 +103,10 @@ class NeuralNetwork:
        self.NNCache = cache
        
 
-    def CostFunction(self,A,Y) :
+    def CostFunction(self,Y) :
+        m = int(len(self.NNParameters)/2)
+        A = self.NNCache.get(f'A{m}')
+        
         m = len(Y)
         left = np.multiply(Y,np.log(A))
         right = np.multiply((1-Y),np.log(1-A))
@@ -111,75 +118,76 @@ class NeuralNetwork:
         dL = A - Y
         return dL        
 
-
-
-    def LinearBackward (self) :
-        pass
+    
         
-    def LinearActivationBackward (self) :
-        pass
+    def LinearActivationBackward (self , dA , Z , actifation_fun) :
+        if actifation_fun == 'sigmoid' :
+           dZ = self.sigmoid_backward(dA,Z)
+           
+        elif actifation_fun == 'relu' :
+           dZ = self.relu_backward(dA,Z)
+           
+        elif actifation_fun == 'tanh' :
+           dZ = self.tanh_backward(dA,Z)     
+           
+        return dZ
+    
     
     def FeedBackward (self,output) :
         n = int(len(self.NNParameters)/2)
-        hx = self.NNCache.get('A2')  # A2
-        dA2 = self.CostFunctionDerivatived(hx,output) # dA3  
-        self.NNDerivatived['dA2'] = dA2
+        hx = self.NNCache.get('A' + str(n))
+        dA2 = self.CostFunctionDerivatived(hx,output) # dA2
+        self.NNDerivatived['dA'+str(n)] = dA2
 
 
 
-        A1 = self.NNCache.get('A1')  # A1
-        A0 = self.NNCache.get('A0')  # A0
-        
-        W2 = self.NNParameters.get('W2')
-        W1 = self.NNParameters.get('W1')
+        for i in range (n, 0, -1)  :
             
-        Z2 = self.NNCache.get('Z2')
-        Z1 = self.NNCache.get('Z1')
-        
-        m = len(A1[0])
-       
+            A_prev = self.NNCache.get('A' + str(i-1))
+            W = self.NNParameters.get('W' + str(i))
+            activ_fun = self.NNActivationFunctions[i]
+            m = len(A_prev)
+            
+            dA = self.NNDerivatived.get('dA' + str(i))
+            
+            Z = self.NNCache.get('Z' + str(i))
+            dZ = self.LinearActivationBackward (dA , Z , activ_fun)       
 
+            dW =  1/m * np.dot(dZ, A_prev.T)
+            db =  1/m * np.sum(dZ, axis=1, keepdims=True)   
+            
+            dA_prev = np.dot(W.T, dZ) 
+            
+            self.NNDerivatived['dZ' +str(i)] = dZ                      
+            self.NNDerivatived['dW' +str(i) ] = dW       
+            self.NNDerivatived['db' +str(i) ] = db       
+            self.NNDerivatived['dA' +str(i-1)] = dA_prev
+
+    def predict(self, x):
+         self.FeedForward(x)
+         
+         n = int(len(self.NNParameters)/2)
+         predicted_values = self.NNCache.get('A' + str(n))
+         
+         return predicted_values
 
         
-        dZ2 = self.sigmoid_backward(dA2,Z2)
-        dW2 =  1/m * np.dot(dZ2, A1.T)
-        db2 =  1/m * np.sum(dZ2, axis=1, keepdims=True)
-        dA1 = np.dot(W2.T, dZ2) 
-
-        
-        dZ1 = self.sigmoid_backward(dA1,Z1)
-        dW1 =  1/m * np.dot(dZ1, A0.T)
-        db1 =  1/m * np.sum(dZ1, axis=1, keepdims=True)
-
-
-        
-
-        
-  
-        
-        self.NNDerivatived['dZ2'] = dZ2
-        self.NNDerivatived['dW2'] = dW2
-        self.NNDerivatived['db2'] = db2
-        self.NNDerivatived['dA1'] = dA1
-        
-        self.NNDerivatived['dZ1'] = dZ1
-        self.NNDerivatived['dW1'] = dW1
-        self.NNDerivatived['db1'] = db1
-        
-    def UpdateParameters(self, learning_rate = 0.001):
+    def UpdateParameters(self, learning_rate ):
   
         L = len(self.NNParameters) // 2 # number of layers in the neural network
 
         for l in range(L):
+
             W = self.NNParameters.get("W" + str(l+1))
             B = self.NNParameters.get("B" + str(l+1))
             
             W -= learning_rate * self.NNDerivatived.get("dW" + str(l+1))
-            # B -= learning_rate * self.NNDerivatived.get("db" + str(l+1))
-            self.NNParameters["W" + str(l+1)] = W
-            # self.NNParameters["b" + str(l+1)] = B
+            B -= learning_rate * self.NNDerivatived.get("db" + str(l+1))
             
-    def Fit (self,input,output) :
+            self.NNParameters["W" + str(l+1)] = W
+            self.NNParameters["B" + str(l+1)] = B
+            
+    def Fit (self,input,output , learning_rate = 0.001 , iterations = 1000) :
         self.NNInput = input
         self.NNOutput = output
         
@@ -189,41 +197,22 @@ class NeuralNetwork:
             
         self.Initialize()    
         
-        
-        # m = int(len(self.NNParameters)/2)
-        # hx = self.NNCache.get(f'A{m}')
-        # cost_fun = self.CostFunction(hx,output)
-        # self.NNCostFunction.append(cost_fun)
-        
-        W = self.NNParameters.get("W" + str(2))
-        B = self.NNParameters.get("B" + str(2))        
-        print(W)
-    
-        for i in range (1) :
+        for i in range (iterations) :
                     
           self.FeedForward(input)  
           self.FeedBackward(output)
-          self.UpdateParameters()
+          self.UpdateParameters(learning_rate)
+          self.NNCostFunction.append(self.CostFunction(output))
           
-        print('-'*20)
-        W = self.NNParameters.get("W" + str(2))
-        B = self.NNParameters.get("B" + str(2))        
-        print(W)
-#--------------------------------------------    
-nn = NeuralNetwork()
-nn.Add(3,activation_fun='sigmoid')
-nn.Add(1,activation_fun='sigmoid')
-nn.Fit(X,y)
-
-
-params = nn.NNParameters
-size = nn.NNSizes
-activation_fun = nn.NNActivationFunctions
-cache = nn.NNCache
-cost = nn.NNCostFunction
-dd = nn.NNDerivatived
-
-
+     
+    def History (self) :
+        cost = self.NNCostFunction
+        print('Training loss :' , cost[-1])
+        plt.plot( cost, color = 'red')
+        plt.title('Training loss function')
+        plt.xlabel('Iterations')
+        plt.ylabel('Loss')
+        plt.show()
 
 
 
